@@ -1,6 +1,16 @@
 # Checklist de Accesibilidad Sénior — Calculadora de Insumos
 
-- **Fecha de revisión:** 2026-09-23 (actualización **FASE 3**: lote, imagen de la
+> ⚠️ **PENDIENTE DE RE-VERIFICACIÓN (rediseño del 2026-09-23):** este checklist se
+> redactó antes del rediseño de la captura. Desde entonces: "¿Qué cuento?" y
+> "¿Cuántos?" se fusionaron en una sola pantalla tipo calculadora
+> (`ui/CalculatorScreen.kt`), el escaneo en vivo con CameraX se sustituyó por
+> **cámara del sistema + lectura de la foto** (sin permiso de cámara) y la
+> cabecera "Paso X de 3" desapareció. Las referencias de línea, los nombres de
+> archivos y el conteo 27/27 están **desactualizados**; las reglas sénior que
+> contiene (≥64dp, ≥20sp, colores, sin gestos) siguen siendo el estándar del
+> proyecto y se aplicaron al código nuevo.
+
+- **Fecha de revisión original:** 2026-09-23 (actualización **FASE 3**: lote, imagen de la
   cuenta, totales enteros, control de tamaño de letra A−/A+). **Re-verificación
   QA del mismo día (post H-1):** §1 re-verificada al 100 % con `grep`, H-1
   resuelto en código y añadidos los objetivos de los botones del DatePicker y

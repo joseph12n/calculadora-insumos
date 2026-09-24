@@ -1,36 +1,29 @@
 package com.bioplast.insumos.model
 
 /**
- * Pantallas del flujo lineal de 7 pasos, gestionado por la ViewModel.
+ * Pantallas del flujo, gestionado por la ViewModel.
  *
- * Orden del registro: [START] → [PICK_PRODUCT] (Paso 1) → [ENTER_QUANTITY] (Paso 2)
- * → [CONFIRM] (Paso 3, única vía de guardar) → [SUCCESS] (con Deshacer ~5 s) → [START].
+ * Orden del registro: [START] → [CALCULATOR] (insumo + cantidad + total en
+ * vivo, una sola pantalla tipo calculadora) → [CONFIRM] (revisar y guardar)
+ * → [SUCCESS] (con Deshacer ~5 s) → [START].
  * Además: [HISTORY] → [DAY_DETAIL] (borrado por fila).
  */
-enum class Screen(val paso: Int) {
+enum class Screen {
     /** Inicio: resumen de la semana actual. */
-    START(0),
+    START,
 
-    /** Paso 1: selección del insumo. */
-    PICK_PRODUCT(1),
+    /** Captura: insumo + cantidad con teclado propio y total en vivo. */
+    CALCULATOR,
 
-    /** Paso 2: cantidad con teclado numérico propio (y OCR opcional). */
-    ENTER_QUANTITY(2),
-
-    /** Paso 3: confirmación; solo aquí se persiste el registro. */
-    CONFIRM(3),
+    /** Revisión del lote; solo aquí se persiste. */
+    CONFIRM,
 
     /** Éxito tras guardar, con opción "Deshacer" (~5 s). */
-    SUCCESS(0),
+    SUCCESS,
 
     /** Historial de semanas anteriores. */
-    HISTORY(0),
+    HISTORY,
 
-    /** Detalle de un día concreto (borrado por fila). */
-    DAY_DETAIL(0),
-    ;
-
-    /** true si la pantalla pertenece al registro (Pasos 1–3) → mostrar "Paso X de 3". */
-    val mostrarIndicadorPaso: Boolean
-        get() = paso in 1..3
+    /** Detalle de una semana concreta (borrado por fila). */
+    DAY_DETAIL,
 }

@@ -38,6 +38,7 @@ import com.bioplast.insumos.model.WeeklySummary
 import com.bioplast.insumos.ui.components.MoneyText
 import com.bioplast.insumos.ui.components.SeniorButton
 import com.bioplast.insumos.ui.components.SeniorButtonVariant
+import com.bioplast.insumos.ui.components.TopBar
 import com.bioplast.insumos.ui.components.escalaAlTocar
 import com.bioplast.insumos.ui.components.fechaCorta
 import com.bioplast.insumos.ui.theme.GreyAction
@@ -48,7 +49,7 @@ import com.bioplast.insumos.ui.theme.SurfaceSoft
 import com.bioplast.insumos.ui.theme.TextPrimary
 
 /**
- * Pantalla 7 — DETALLE de la semana elegida en el historial.
+ * Pantalla 6 — DETALLE de la semana elegida en el historial.
  *
  * Encabezado con **← Atrás**, "Semana N" y el total; debajo, filas enormes con
  * fecha corta, "10 Frascos de orina", el total en cifra grande y el botón rojo
@@ -84,14 +85,11 @@ fun DayDetailScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        SeniorButton(
-            text = "← Atrás",
-            onClick = onAtras,
-            modifier = Modifier.heightIn(min = 64.dp),
-            variant = SeniorButtonVariant.GREY,
+        TopBar(
+            onBack = onAtras,
             contentDescription = "Atrás, volver al historial",
         )
 

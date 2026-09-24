@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Rutas que el FileProvider puede compartir con la cámara del sistema.
+  Solo la carpeta de fotos temporales dentro de cacheDir: nada del
+  almacenamiento del usuario queda expuesto.
+-->
+<paths>
+    <cache-path
+        name="fotos"
+        path="fotos/" />
+</paths>

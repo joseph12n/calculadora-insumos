@@ -1,5 +1,6 @@
 package com.bioplast.insumos.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,28 +25,32 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bioplast.insumos.model.CurrencyFormat
 import com.bioplast.insumos.model.ProductType
+import com.bioplast.insumos.ui.theme.GreenAction
 import com.bioplast.insumos.ui.theme.GreyAction
 import com.bioplast.insumos.ui.theme.ProductAccent
 import com.bioplast.insumos.ui.theme.TextPrimary
 
 /**
- * Tarjeta-botón apilada para elegir un insumo (Paso 1).
+ * Tarjeta-botón apilada para elegir un insumo (diálogo de la calculadora).
  * Emoji dentro de un círculo blanco que respeta H-1: mínimo 64dp que crece con
  * el glifo a cualquier escala de fuente y se mantiene circular y centrado
  * (helper [Modifier.circuloMinimo] — nunca un tamaño fijo) + nombre
  * (26sp bold) + precio unitario en gris (22sp CON decimales: es texto pequeño
  * y la precisión ahí sí importa). Toda la tarjeta es clicable (un solo toque,
  * sin gestos), mínimo 80dp de alto, esquinas 20dp, elevación suave y
- * feedback táctil (scale 0.98).
+ * feedback táctil (scale 0.98). Si [selected] es `true` lleva borde verde y
+ * una palomita al final, para que se vea cuál está elegido.
  *
  * @param product insumo a mostrar (nombre, precio y emoji vienen del modelo).
  * @param onClick selección del producto.
+ * @param selected `true` = es el insumo elegido en este momento.
  */
 @Composable
 fun ProductCard(
     product: ProductType,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selected: Boolean = false
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -58,6 +63,7 @@ fun ProductCard(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = ProductAccent),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = if (selected) BorderStroke(width = 3.dp, color = GreenAction) else null,
         interactionSource = interactionSource
     ) {
         Row(
@@ -99,6 +105,14 @@ fun ProductCard(
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Normal,
                     color = GreyAction
+                )
+            }
+            if (selected) {
+                Text(
+                    text = "✓",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = GreenAction,
                 )
             }
         }

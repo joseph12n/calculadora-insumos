@@ -42,7 +42,7 @@ import com.bioplast.insumos.model.ProductType
 import com.bioplast.insumos.ui.components.MoneyText
 import com.bioplast.insumos.ui.components.SeniorButton
 import com.bioplast.insumos.ui.components.SeniorButtonVariant
-import com.bioplast.insumos.ui.components.StepHeader
+import com.bioplast.insumos.ui.components.TopBar
 import com.bioplast.insumos.ui.components.circuloMinimo
 import com.bioplast.insumos.ui.components.escalaAlTocar
 import com.bioplast.insumos.ui.components.fechaCorta
@@ -64,13 +64,13 @@ import java.time.format.FormatStyle
 import java.util.Locale
 
 /**
- * Pantalla 4 — PASO 3 — "Tu lista": revisión del item actual y del LOTE.
+ * Pantalla 3 — REVISAR "Tu lista": revisión del item actual y del LOTE.
  *
- * Arriba: cabecera (**← Atrás** + "Paso 3 de 3") y "¿Guardamos esto?".
+ * Arriba: cabecera (**← Atrás**) y "¿Guardamos esto?".
  * Después la fila del item actual (cantidad × producto en texto enorme, MONEY
  * sin decimales de 48–60sp, fecha + botón **📅 Cambiar fecha**).
  *
- * Luego **➕ Agregar otro** (OUTLINE gris, ≥64dp) que vuelve al Paso 1 dejando
+ * Luego **➕ Agregar otro** (OUTLINE gris, ≥64dp) que vuelve a la calculadora dejando
  * la lista intacta, y la SECCIÓN "En tu lista" con los pendientes: cada fila
  * trae producto, fecha y total (entero), el botón circular **📅** para cambiar
  * la fecha de ese item (mismo DatePicker) y el botón circular **✕** ROJO para
@@ -92,10 +92,10 @@ import java.util.Locale
  * @param isSaving `true` mientras persiste (bloquea GUARDAR / Atrás).
  * @param savingError mensaje de error de persistencia (`null` = sin error).
  * @param onGuardar toque en **✔ GUARDAR TODO** → guarda el lote completo.
- * @param onAgregarOtro toque en **➕ Agregar otro** → Paso 1 dejando la lista.
+ * @param onAgregarOtro toque en **➕ Agregar otro** → calculadora dejando la lista.
  * @param onQuitarPendiente toque en ✕ de la fila `pos` → la quita de la lista.
  * @param onFechaDePendiente fecha elegida para el pendiente `pos`.
- * @param onAtras toque en **← Corregir** → vuelve al Paso 2.
+ * @param onAtras toque en **← Corregir** → vuelve a la calculadora.
  * @param onFecha nueva fecha elegida para el item actual.
  */
 @Composable
@@ -126,11 +126,11 @@ fun ConfirmScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        StepHeader(step = 3, onBack = onAtras, backEnabled = !isSaving)
+        TopBar(onBack = onAtras, backEnabled = !isSaving)
 
         Text(
             text = "¿Guardamos esto?",
@@ -186,7 +186,7 @@ fun ConfirmScreen(
         }
 
         // -------------------------------------------------------------
-        // ➕ Agregar otro → Paso 1 dejando la lista intacta
+        // ➕ Agregar otro → calculadora dejando la lista intacta
         // -------------------------------------------------------------
         SeniorButton(
             text = "➕ Agregar otro",

@@ -15,8 +15,8 @@ android {
         // LocalDate/WeekFields (java.time) requieren API 26+ sin desugaring
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -85,12 +85,11 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // Cámara / OCR
-    implementation(libs.camerax.core)
-    implementation(libs.camerax.camera2)
-    implementation(libs.camerax.lifecycle)
-    implementation(libs.camerax.view)
+    // OCR de la foto (ML Kit, on-device). La captura la hace la cámara del
+    // sistema: no hay CameraX ni permiso de cámara en esta app.
     implementation(libs.mlkit.text.recognition)
+    // Rotación EXIF de la foto ANTES de procesarla (recortes y umbral).
+    implementation(libs.androidx.exifinterface)
 
     implementation(libs.kotlinx.coroutines.android)
 

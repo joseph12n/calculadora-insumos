@@ -18,26 +18,23 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Fallback del OCR: "No pude leer el número. Escríbelo tú mismo." sin borrar
- * la cantidad que la persona ya había escrito.
+ * Fallback de la lectura de la FOTO: "No pude leer números en la foto.
+ * Escríbelo tú mismo." sin borrar la cantidad que la persona ya había escrito.
  *
- * DECISIÓN DE IMPLEMENTACIÓN DEL TEST (documentada como pide la consigna):
- * el camino 100 % por UI exige abrir [CameraScanScreen] (permiso de cámara +
- * hardware real) y esperar su cierre con `null` — no automatizable de forma
- * estable sin un dispositivo con cámara/permisos. MainActivity.kt:141-144 hace,
- * al cerrar la cámara: `viewModel.onEscanearResultado(numero)` con `numero == null`.
+ * DECISIÓN DE IMPLEMENTACIÓN DEL TEST: el camino 100 % por UI exige abrir la
+ * cámara del sistema con `ActivityResultContracts.TakePicture` (necesita app de
+ * cámara real) y elegir una foto — no automatizable de forma estable sin un
+ * dispositivo con cámara. MainActivity.kt hace, tras leer la foto:
+ * `viewModel.onImagenLeida(numeros)` (lista vacía cuando no se leyó nada).
  * Por eso este suite prueba las DOS mitades de ese contrato exacto:
  *
- *  1. [laUiDelPaso2MuestraElMensajeSinBorrarLoEscrito]: nivel de COMPOSICIÓN
- *     (autorizado por la consigna): compone [EnterQuantityScreen] con un estado
- *     ya resultante (`ocrMessage = MENSAJE_OCR_FALLIDO`, `quantityInput = "25"`)
- *     y verifica que el mensaje aparece y la cifra NO desaparece.
- *  2. [laViewModelRealConservaLaCantidadCuandoElOcrFalla]: invoca la ViewModel
- *     REAL —misma llamada que haría MainActivity tras el fallo de cámara—
- *     `onEscanearResultado(null)` y verifica `ocrMessage` + `quantityInput`.
- *
- * Para probar también el camino de cámara completo, conectar un celular y
- * ampliar este suite con un test de UI sobre CameraScanScreen (corrida posterior).
+ *  1. [laUiDeLaCalculadoraMuestraElMensajeSinBorrarLoEscrito]: nivel de
+ *     COMPOSICIÓN: compone [CalculatorScreen] con un estado ya resultante
+ *     (`ocrMessage = MENSAJE_IMAGEN_FALLIDO`, `quantityInput = "25"`) y verifica
+ *     que el mensaje aparece y la cifra NO desaparece.
+ *  2. [laViewModelRealConservaLaCantidadCuandoLaFotoFalla]: invoca la ViewModel
+ *     REAL —misma llamada que haría MainActivity con una foto ilegible—
+ *     `onImagenLeida(emptyList())` y verifica `ocrMessage` + `quantityInput`.
  */
 @RunWith(AndroidJUnit4::class)
 class MensajeOcrFallbackTest {
@@ -60,72 +57,76 @@ class MensajeOcrFallbackTest {
     // ---------------------------------------------------------------------
 
     @Test
-    fun laUiDelPaso2MuestraElMensajeDelOcrSinBorrarLoEscrito() {
+    fun laUiDeLaCalculadoraMuestraElMensajeDeLaFotoSinBorrarLoEscrito() {
         regla.setContent {
             CalculadoraInsumosTheme {
-                EnterQuantityScreen(
+                CalculatorScreen(
                     quantityInput = "25",
                     producto = ProductType.FRASCO_ORINA,
                     quantityError = false,
+                    productError = false,
+                    totalCop = ProductType.FRASCO_ORINA.totalPara(25),
                     isSaving = false,
-                    ocrMessage = InventoryViewModel.MENSAJE_OCR_FALLIDO,
+                    ocrMessage = InventoryViewModel.MENSAJE_IMAGEN_FALLIDO,
                     savingError = null,
                     onDigito = {},
                     onBorrarDigito = {},
-                    onEscanear = {},
+                    onProductoElegido = {},
+                    onHacerFoto = {},
                     onSiguiente = {},
                     onAtras = {},
                 )
             }
         }
 
-        // El mensaje literal de la consigna está en pantalla…
-        regla.onNodeWithText("No pude leer el número. Escríbelo tú mismo.")
+        // El mensaje literal está en pantalla…
+        regla.onNodeWithText("No pude leer números en la foto. Escríbelo tú mismo.")
             .assertIsDisplayed()
         // …y la cantidad escrita ANTES del fallo NO se borró.
         regla.onNodeWithText("25").assertIsDisplayed()
-        // El fallo de OCR no es un error de validación: no muestra el aviso rojo.
+        // El fallo de lectura no es un error de validación: no muestra el aviso rojo.
         regla.onNodeWithText("Primero escribe cuántos").assertDoesNotExist()
     }
 
     // ---------------------------------------------------------------------
-    // 2) ViewModel real: la MISMA llamada que hace MainActivity con el null
+    // 2) ViewModel real: la MISMA llamada que hace MainActivity con la foto vacía
     // ---------------------------------------------------------------------
 
     @Test
-    fun laViewModelRealConservaLaCantidadCuandoElOcrFalla() {
+    fun laViewModelRealConservaLaCantidadCuandoLaFotoFalla() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val viewModel =
             InventoryViewModel.factory(context).create(InventoryViewModel::class.java)
 
-        // Persona en el PASO 2 que ya escribió 25 a mano…
+        // Persona en la calculadora que ya escribió 25 a mano…
+        viewModel.onEmpezarConteo()
         viewModel.onProductoElegido(ProductType.FRASCO_ORINA)
         viewModel.onDigito("2")
         viewModel.onDigito("5")
         assertEquals("25", viewModel.uiState.value.quantityInput)
 
-        // …y la cámara falla: exactamente la llamada de MainActivity.kt:142
-        // (CameraScanScreen entrega null → onResultado(null)).
-        viewModel.onEscanearResultado(null)
+        // …y la foto sale ilegible: exactamente la llamada de MainActivity
+        // (extraerNumerosDeImagen devuelve lista vacía → onImagenLeida(emptyList())).
+        viewModel.onImagenLeida(emptyList())
 
         val estado = viewModel.uiState.value
         assertEquals(
             "Debe mostrarse el mensaje de fallback literal",
-            "No pude leer el número. Escríbelo tú mismo.",
+            "No pude leer números en la foto. Escríbelo tú mismo.",
             estado.ocrMessage,
         )
         assertEquals(
-            InventoryViewModel.MENSAJE_OCR_FALLIDO,
+            InventoryViewModel.MENSAJE_IMAGEN_FALLIDO,
             estado.ocrMessage,
         )
         assertEquals(
-            "El OCR fallido NUNCA borra lo que la persona escribió",
+            "La foto ilegible NUNCA borra lo que la persona escribió",
             "25",
             estado.quantityInput,
         )
         assertEquals(
-            "El fallo de OCR no saca del PASO 2",
-            Screen.ENTER_QUANTITY,
+            "El fallo de la foto no saca de la calculadora",
+            Screen.CALCULATOR,
             estado.screen,
         )
     }

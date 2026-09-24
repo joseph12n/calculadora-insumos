@@ -19,13 +19,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Test de UI del LOTE (FASE 3) sobre [MainActivity]: dos productos en una sesión.
+ * Test de UI del LOTE sobre [MainActivity]: dos productos en una sesión.
  *
  * Recorrido (un toque por acción, teclado PROPIO, sin gestos):
- *  1. INICIO → PASO 1 → "Frasco de orina" × 1 → PASO 3 (sin lista todavía:
- *     NO aparece "En tu lista").
- *  2. **➕ Agregar otro** → vuelve al PASO 1 con la lista empezada.
- *  3. "Cryotubo" × 1 → PASO 3 con **2 filas visibles**: el item ACTUAL
+ *  1. INICIO → CALCULADORA → "Frasco de orina" × 1 → REVISIÓN (sin lista
+ *     todavía: NO aparece "En tu lista").
+ *  2. **➕ Agregar otro** → vuelve a la calculadora con la lista empezada y el
+ *     diálogo del insumo abierto otra vez.
+ *  3. "Cryotubo" × 1 → REVISIÓN con **2 filas visibles**: el item ACTUAL
  *     ("1 Cryotubo") y el pendiente de la lista ("1 Frasco de orina") dentro de
  *     la sección **"En tu lista"**, con sus botones circulares 📅 / ✕.
  *  4. Totales del lote: "2 productos" (1 + 1) y la cifra SIN decimales
@@ -70,32 +71,31 @@ class LoteBasicoTest {
 
     @Test
     fun loteDeDosProductosSeGuardaTodoYTerminaEnExitoConDosProductos() {
-        // --- INICIO → PASO 1 → PASO 2 (Frasco de orina × 1) --------------------
+        // --- INICIO → CALCULADORA → REVISIÓN (Frasco de orina × 1) ------------
         esperarTexto("0 insumos")
         tocar("➕ CONTAR INSUMOS")
         regla.onNodeWithText("¿Qué vas a contar?").assertIsDisplayed()
-        regla.onNodeWithText("Frasco de orina").performScrollTo().performClick()
+        regla.onNodeWithText("Frasco de orina").performClick()
         regla.onNodeWithText("¿Cuántos?").assertIsDisplayed()
-        regla.onNodeWithContentDescription("Tecla 1").performScrollTo().performClick()
+        regla.onNodeWithContentDescription("Tecla 1").performClick()
 
-        // --- PASO 3 del primer item: aún NO hay lista ---------------------------
-        tocar("SEGUIR →")
+        // --- REVISIÓN del primer item: aún NO hay lista ------------------------
+        regla.onNodeWithText("SEGUIR →").performClick()
         regla.onNodeWithText("¿Guardamos esto?").assertIsDisplayed()
-        // El Paso 3 entero vive en una Column con verticalScroll (ConfirmScreen.kt:120-124):
-        // con la tarjeta del item + "Agregar otro" + totales, GUARDAR TODO queda
-        // bajo el pliegue del viewport → hay que hacer scroll antes del assert.
+        // La revisión entera vive en una Column con verticalScroll
+        // (ConfirmScreen.kt): GUARDAR TODO puede quedar bajo el pliegue.
         regla.onNodeWithText("✔ GUARDAR TODO").performScrollTo().assertIsDisplayed()
         regla.onNodeWithText("En tu lista").assertDoesNotExist() // lista vacía
 
-        // --- ➕ Agregar otro → vuelve al PASO 1 con la lista empezada ------------
+        // --- ➕ Agregar otro → calculadora con la lista empezada ---------------
         tocar("➕ Agregar otro")
-        regla.onNodeWithText("¿Qué vas a contar?").assertIsDisplayed()
+        regla.onNodeWithText("¿Qué vas a contar?").assertIsDisplayed() // diálogo abierto
 
-        // --- Segundo item: Cryotubo × 1 → PASO 3 con 1 pendiente + actual -------
-        regla.onNodeWithText("Cryotubo").performScrollTo().performClick()
+        // --- Segundo item: Cryotubo × 1 → REVISIÓN con 1 pendiente + actual ----
+        regla.onNodeWithText("Cryotubo").performClick()
         regla.onNodeWithText("¿Cuántos?").assertIsDisplayed()
-        regla.onNodeWithContentDescription("Tecla 1").performScrollTo().performClick()
-        tocar("SEGUIR →")
+        regla.onNodeWithContentDescription("Tecla 1").performClick()
+        regla.onNodeWithText("SEGUIR →").performClick()
         regla.onNodeWithText("¿Guardamos esto?").assertIsDisplayed()
 
         // --- 2 filas en pantalla: el item ACTUAL y el pendiente "En tu lista" ---
@@ -109,8 +109,6 @@ class LoteBasicoTest {
             .assertIsDisplayed()
 
         // --- Total del lote: 1 + 1 = 2 unidades; 15.08 SIN decimales ------------
-        // Igual que GUARDAR TODO: la tarjeta de totales queda bajo el pliegue del
-        // viewport en el Paso 3 (Column con verticalScroll, ConfirmScreen.kt:127-131).
         regla.onNodeWithText("2 productos").performScrollTo().assertIsDisplayed()
         esperarTexto("15", substring = true) // 7.18 + 7.90 = 15.08 → "…15"
         assertTrue(

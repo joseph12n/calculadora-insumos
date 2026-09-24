@@ -28,10 +28,10 @@ import org.junit.runner.RunWith
 /**
  * Regresión de la regla sénior: "el teclado del sistema NUNCA aparece".
  *
- * La cantidad se escribe SOLO con el [Keypad] propio (Keypad.kt documenta
- * "Nunca usa BasicTextField ni el teclado del sistema"). Este test toca la zona
- * del número gigante y las teclas, y luego verifica desde DOS ángulos que no
- * existe ningún campo editable:
+ * La cantidad se escribe SOLO con el [com.bioplast.insumos.ui.components.Keypad]
+ * propio (Keypad.kt documenta "Nunca usa BasicTextField ni el teclado del
+ * sistema"). Este test toca la zona del número del visor y las teclas, y luego
+ * verifica desde DOS ángulos que no existe ningún campo editable:
  *
  *  1. Espresso: ningún `EditText` en la jerarquía de vistas de la activity
  *     (si el IME del sistema se abriera, habría un EditText con foco).
@@ -63,20 +63,20 @@ class SinTecladoSistemaTest {
 
     @Test
     fun tocarLaCifraYElTecladoNoInvocaElTecladoDelSistema() {
-        // --- Llega al PASO 2 ----------------------------------------------------
+        // --- Llega a la calculadora ---------------------------------------------
         esperarTexto("¿Qué hacemos hoy?")
         regla.onNodeWithText("➕ CONTAR INSUMOS").performScrollTo().performClick()
-        regla.onNodeWithText("Frasco de orina").performScrollTo().performClick()
+        regla.onNodeWithText("Frasco de orina").performClick()
         regla.onNodeWithText("¿Cuántos?").assertIsDisplayed()
 
-        // --- Toca la ZONA del número gigante (la cifra "0", nodo sin click       //
-        //     action: un toque normal ahí no debe abrir ningún IME).               //
+        // --- Toca la ZONA de la cifra del visor (el "0" sin click action: un    //
+        //     toque normal ahí no debe abrir ningún IME).                         //
         regla.onNode(hasText("0") and !hasClickAction())
             .performTouchInput { click() }
 
         // --- Toca el teclado PROPIO (contentDescription por tecla) ----------------
-        regla.onNodeWithContentDescription("Tecla 1").performScrollTo().performClick()
-        regla.onNodeWithContentDescription("Tecla 7").performScrollTo().performClick()
+        regla.onNodeWithContentDescription("Tecla 1").performClick()
+        regla.onNodeWithContentDescription("Tecla 7").performClick()
         regla.onNodeWithText("17").assertIsDisplayed() // el teclado propio funciona
 
         // --- 1) Espresso: NO existe ningún EditText en pantalla ------------------

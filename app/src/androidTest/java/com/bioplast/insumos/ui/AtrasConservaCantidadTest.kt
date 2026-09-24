@@ -23,12 +23,12 @@ import org.junit.runner.RunWith
 /**
  * Regresión de la regla sénior "Atrás nunca pierde lo escrito".
  *
- * Escrito en el PASO 2: 25 → "← Atrás" (vuelve al PASO 1) → reentrar al PASO 2
- * eligiendo el producto otra vez → la cantidad sigue siendo 25.
+ * Escrito 25 en la calculadora → "← Atrás" (vuelve al Inicio) → reentrar con
+ * CONTAR INSUMOS: la cantidad sigue siendo 25 y el insumo elegido también.
  *
  * La regla es [MainActivity], que pinta el estado real de la ViewModel
- * (`InventoryViewModel.onAtras` debe conservar `quantityInput`; la copia del
- * estado en EnterQuantityScreen.kt solo navega, no limpia el campo).
+ * (`InventoryViewModel.onAtras` debe conservar `quantityInput` y
+ * `selectedProduct`; la pantalla de la calculadora solo navega, no limpia).
  */
 @RunWith(AndroidJUnit4::class)
 class AtrasConservaCantidadTest {
@@ -52,63 +52,59 @@ class AtrasConservaCantidadTest {
     }
 
     /**
-     * Selector NO ambiguo de la cifra gigante del Paso 2 (`EnterQuantityScreen.kt:116-123`).
+     * Selector NO ambiguo de la cifra del visor (`CalculatorScreen.kt`).
      *
      * El nodo fusionado de la tecla "7" del teclado propio TAMBIÉN contiene el
-     * texto "7" (su `contentDescription` es "Tecla 7", `Keypad.kt:119`), así que
+     * texto "7" (su `contentDescription` es "Tecla 7"), así que
      * `onNodeWithText("7")` encuentra 2 nodos y lanza "Expected at most 1 node".
-     * La cifra de 72 sp es el único "7" SIN esa descripción.
+     * La cifra del visor es el único "7" SIN esa descripción.
      */
-    private fun cifraGigante(texto: String): SemanticsMatcher =
+    private fun cifraDelVisor(texto: String): SemanticsMatcher =
         hasText(texto) and !hasContentDescription("Tecla $texto")
 
     @Test
-    fun atrasDesdeElPaso2NoPierdeLaCantidadEscrita() {
-        // --- INICIO → PASO 1 → PASO 2 -----------------------------------------
+    fun atrasDesdeLaCalculadoraNoPierdeLaCantidadEscrita() {
+        // --- INICIO → CALCULADORA → "Frasco de orina" -------------------------
         esperarTexto("¿Qué hacemos hoy?")
         regla.onNodeWithText("➕ CONTAR INSUMOS").performScrollTo().performClick()
         regla.onNodeWithText("¿Qué vas a contar?").assertIsDisplayed()
-        regla.onNodeWithText("Frasco de orina").performScrollTo().performClick()
+        regla.onNodeWithText("Frasco de orina").performClick()
         regla.onNodeWithText("¿Cuántos?").assertIsDisplayed()
 
         // --- Escribe 25 con el teclado propio -----------------------------------
-        regla.onNodeWithContentDescription("Tecla 2").performScrollTo().performClick()
-        regla.onNodeWithContentDescription("Tecla 5").performScrollTo().performClick()
+        regla.onNodeWithContentDescription("Tecla 2").performClick()
+        regla.onNodeWithContentDescription("Tecla 5").performClick()
         regla.onNodeWithText("25").assertIsDisplayed()
 
-        // --- "← Atrás" del PASO 2 → PASO 1 --------------------------------------
+        // --- "← Atrás" de la calculadora → INICIO -------------------------------
         regla.onNodeWithContentDescription("Atrás, volver al paso anterior").performClick()
-        regla.onNodeWithText("¿Qué vas a contar?").assertIsDisplayed()
+        esperarTexto("¿Qué hacemos hoy?")
 
-        // --- Reentrar al PASO 2: la cantidad debe seguir siendo 25 ---------------
-        regla.onNodeWithText("Frasco de orina").performScrollTo().performClick()
+        // --- Reentrar: la cantidad (y el insumo) deben seguir ahí ---------------
+        regla.onNodeWithText("➕ CONTAR INSUMOS").performScrollTo().performClick()
         regla.onNodeWithText("¿Cuántos?").assertIsDisplayed()
         regla.onNodeWithText("25").assertIsDisplayed() // ← la regla "Atrás conserva"
+        regla.onNodeWithText("Frasco de orina").assertIsDisplayed()
 
         // Sin error residual: "Atrás" apagó quantityError, SEGUIR sigue habilitado.
         regla.onNodeWithText("Primero escribe cuántos").assertDoesNotExist()
-        regla.onNodeWithText("SEGUIR →").performScrollTo().assertIsEnabled()
+        regla.onNodeWithText("SEGUIR →").assertIsEnabled()
     }
 
     @Test
-    fun atrasDelPaso1AlInicioTambienConservaLaCantidad() {
-        // Variante larga: PASO 2 → PASO 1 → INICIO → reentrar → cantidad intacta.
+    fun atrasConservaTambienElInsumoElegido() {
         esperarTexto("¿Qué hacemos hoy?")
         regla.onNodeWithText("➕ CONTAR INSUMOS").performScrollTo().performClick()
-        regla.onNodeWithText("Frasco de orina").performScrollTo().performClick()
-        regla.onNodeWithContentDescription("Tecla 7").performScrollTo().performClick()
-        regla.onNode(cifraGigante("7")).assertIsDisplayed()
+        regla.onNodeWithText("Frasco de orina").performClick()
+        regla.onNodeWithContentDescription("Tecla 7").performClick()
+        regla.onNode(cifraDelVisor("7")).assertIsDisplayed()
 
-        // PASO 2 → PASO 1 → INICIO (dos veces Atrás).
-        regla.onNodeWithContentDescription("Atrás, volver al paso anterior").performClick()
-        regla.onNodeWithText("¿Qué vas a contar?").assertIsDisplayed()
+        // Atrás → INICIO → reentrar: la "7" y el insumo sobrevivieron.
         regla.onNodeWithContentDescription("Atrás, volver al paso anterior").performClick()
         esperarTexto("¿Qué hacemos hoy?")
-
-        // Reentrar: la "7" sobrevivió a toda la cadena de Atrás.
         regla.onNodeWithText("➕ CONTAR INSUMOS").performScrollTo().performClick()
-        regla.onNodeWithText("Frasco de orina").performScrollTo().performClick()
         regla.onNodeWithText("¿Cuántos?").assertIsDisplayed()
-        regla.onNode(cifraGigante("7")).assertIsDisplayed()
+        regla.onNode(cifraDelVisor("7")).assertIsDisplayed()
+        regla.onNodeWithText("Frasco de orina").assertIsDisplayed()
     }
 }

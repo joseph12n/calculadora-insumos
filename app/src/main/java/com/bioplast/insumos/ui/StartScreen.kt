@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,13 +38,16 @@ import com.bioplast.insumos.ui.theme.SurfaceSoft
 import com.bioplast.insumos.ui.theme.TextPrimary
 
 /**
- * Pantalla 1 — INICIO del flujo.
+ * Pantalla 1 — INICIO.
  *
- * Tarjeta con el resumen de la semana actual ("Semana 39 · $215 · 30 insumos",
- * MONEY SIN decimales), y si hay una lista empezada, el aviso
- * "📋 Tienes N productos en tu lista" con el botón verde **CONTINUAR LISTA**
- * junto a **➕ CONTAR INSUMOS**. Abajo, **📋 VER REGISTROS** y el control de
- * tamaño de letra (**A−** / **A+**, persistido con [com.bioplast.insumos.ui.texto.AjustesTexto]).
+ * Jerarquía clara en tres bloques:
+ *  1. **Resumen de la semana** (tarjeta "visor": Semana N, total grande,
+ *     insumos contados) — la memoria semanal, que es la función distintiva.
+ *  2. **Acciones**: ➕ CONTAR INSUMOS (verde, la principal) y, si hay una lista
+ *     empezada, el aviso + CONTINUAR LISTA. 📋 VER REGISTROS queda como
+ *     secundaria en estilo OUTLINE para que no compita con la principal.
+ *  3. **Tamaño de letra** (A− / A+), en una sola fila compacta.
+ *
  * Cero gestos y cero menús ocultos: todo se alcanza con un solo toque.
  *
  * Estados propios de esta pantalla:
@@ -60,8 +63,8 @@ import com.bioplast.insumos.ui.theme.TextPrimary
  * @param productosEnLista cuántos productos lleva la lista empezada (0 = ninguna).
  * @param loading `true` mientras no llega el primer resumen de Room.
  * @param dataError `true` si la base local no respondió (estado reintentable).
- * @param onContar toque en ➕ CONTAR INSUMOS → abre el Paso 1.
- * @param onContinuarLista toque en **CONTINUAR LISTA** → vuelve al Paso 3 con la lista.
+ * @param onContar toque en ➕ CONTAR INSUMOS → abre la calculadora.
+ * @param onContinuarLista toque en **CONTINUAR LISTA** → vuelve a revisar la lista.
  * @param onVerRegistros toque en 📋 VER REGISTROS → abre el historial.
  * @param onReintentar toque en "Intentar de nuevo" del estado de error.
  */
@@ -83,9 +86,9 @@ fun StartScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         when {
             loading -> EstadoCargando()
@@ -107,7 +110,7 @@ fun StartScreen(
                     totalInsumos = totalInsumos,
                 )
 
-                // Lista empezada: aviso + CONTINUAR LISTA junto a CONTAR INSUMOS.
+                // Lista empezada: aviso + CONTINUAR LISTA.
                 if (productosEnLista > 0) {
                     AvisoListaEnCurso(productosEnLista = productosEnLista)
 
@@ -139,7 +142,7 @@ fun StartScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 72.dp),
-                    variant = SeniorButtonVariant.GREY,
+                    variant = SeniorButtonVariant.OUTLINE,
                     contentDescription = "Ver los registros de semanas anteriores",
                 )
 
@@ -149,7 +152,11 @@ fun StartScreen(
     }
 }
 
-/** Resumen de la semana: "Semana N" + cifra grande SIN decimales + "N insumos". */
+/**
+ * Resumen de la semana (visor): etiqueta "ESTA SEMANA · Semana N", cifra
+ * grande SIN decimales y "N insumos". Es la función de memoria semanal
+ * destacada como protagonista del Inicio.
+ */
 @Composable
 private fun TarjetaResumenSemanal(
     semanaActual: Int,
@@ -166,16 +173,22 @@ private fun TarjetaResumenSemanal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            Text(
+                text = "ESTA SEMANA",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = GreyAction,
+            )
             Text(
                 text = "Semana $semanaActual",
                 style = MaterialTheme.typography.titleLarge,
                 color = TextPrimary,
             )
-            MoneyText(valor = totalCop, size = 56.sp)
+            MoneyText(valor = totalCop, size = 56.sp, modifier = Modifier.padding(top = 6.dp))
             Text(
                 text = "$totalInsumos insumos",
                 style = MaterialTheme.typography.bodyLarge,
@@ -201,7 +214,7 @@ private fun AvisoListaEnCurso(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -218,10 +231,10 @@ private fun AvisoListaEnCurso(
 }
 
 /**
- * Control de tamaño de letra (persistente): etiqueta 20sp + par de botones
- * **A−** (OUTLINE) / **A+** (GREY) de 64dp. Se deshabilitan al llegar a los
- * límites (0.85..1.6, paso 0.15) y el cambio se aplica al instante en toda la
- * app (ver [com.bioplast.insumos.ui.texto.ConEscalaDeTexto]).
+ * Control de tamaño de letra (persistente): en UNA fila, la etiqueta
+ * "Tamaño de letra" + **A−** (OUTLINE) / **A+** (GREY) de 64dp. Se deshabilitan
+ * al llegar a los límites (0.85..1.6, paso 0.15) y el cambio se aplica al
+ * instante en toda la app (ver [com.bioplast.insumos.ui.texto.ConEscalaDeTexto]).
  */
 @Composable
 private fun ControlTamanoLetra(modifier: Modifier = Modifier) {
@@ -229,48 +242,39 @@ private fun ControlTamanoLetra(modifier: Modifier = Modifier) {
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
         color = SurfaceSoft,
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 text = "Tamaño de letra",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = GreyAction,
-                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                SeniorButton(
-                    text = "A−",
-                    onClick = control.disminuir,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 64.dp),
-                    variant = SeniorButtonVariant.OUTLINE,
-                    enabled = control.puedeDisminuir,
-                    contentDescription = "Letra más pequeña",
-                )
-                SeniorButton(
-                    text = "A+",
-                    onClick = control.aumentar,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 64.dp),
-                    variant = SeniorButtonVariant.GREY,
-                    enabled = control.puedeAumentar,
-                    contentDescription = "Letra más grande",
-                )
-            }
+            SeniorButton(
+                text = "A−",
+                onClick = control.disminuir,
+                modifier = Modifier.heightIn(min = 64.dp),
+                variant = SeniorButtonVariant.OUTLINE,
+                enabled = control.puedeDisminuir,
+                contentDescription = "Letra más pequeña",
+            )
+            SeniorButton(
+                text = "A+",
+                onClick = control.aumentar,
+                modifier = Modifier.heightIn(min = 64.dp),
+                variant = SeniorButtonVariant.GREY,
+                enabled = control.puedeAumentar,
+                contentDescription = "Letra más grande",
+            )
         }
     }
 }
@@ -289,7 +293,7 @@ private fun EstadoCargando(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             CircularProgressIndicator(
-                modifier = Modifier.height(72.dp),
+                modifier = Modifier.size(72.dp),
                 color = GreenAction,
                 strokeWidth = 8.dp,
             )

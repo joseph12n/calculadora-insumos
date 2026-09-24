@@ -175,6 +175,7 @@ class InventoryViewModelTest {
         cantidad: String,
         fecha: LocalDate? = null,
     ) {
+        vm.onEmpezarConteo()
         vm.onProductoElegido(producto)
         vm.escribirCantidad(cantidad)
         vm.onSiguiente()
@@ -184,47 +185,78 @@ class InventoryViewModelTest {
     }
 
     // ---------------------------------------------------------------------
-    // Paso 2: validación de cantidad
+    // Calculadora: validación de cantidad y producto
     // ---------------------------------------------------------------------
 
     @Test
-    fun cantidadCeroActivaElErrorYNoAvanzaAlPaso3() = runTest {
+    fun cantidadCeroActivaElErrorYNoAvanzaARevisar() = runTest {
         val vm = crearViewModel()
-        vm.onProductoElegido(ProductType.FRASCO_ORINA) // Paso 1 → Paso 2 (cantidad "0")
-        assertEquals(Screen.ENTER_QUANTITY, vm.uiState.value.screen)
+        vm.onEmpezarConteo()
+        vm.onProductoElegido(ProductType.FRASCO_ORINA) // la cantidad sigue "0"
+        assertEquals(Screen.CALCULATOR, vm.uiState.value.screen)
 
-        vm.onSiguiente() // cantidad 0 → debe quedarse en el Paso 2 con error
+        vm.onSiguiente() // cantidad 0 → debe quedarse en la calculadora con error
 
         val estado = vm.uiState.value
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
         assertTrue("quantityError debe estar activo con cantidad 0", estado.quantityError)
         assertEquals(0, estado.cantidad)
         assertEquals("Nunca persiste con cantidad 0", 0, dao.insertados.size)
 
-        // Al escribir un dígito el error se limpia (la UI habilita "Siguiente").
+        // Al escribir un dígito el error se limpia (SEGUIR vuelve a validar).
         vm.onDigito("5")
         assertFalse(vm.uiState.value.quantityError)
         assertEquals("5", vm.uiState.value.quantityInput)
     }
 
     @Test
-    fun productoElegidoLlevaAlPasoDeCantidad() = runTest {
+    fun laTeclaDobleCeroAgregaDosCeros() = runTest {
         val vm = crearViewModel()
-        vm.onProductoElegido(ProductType.CRYOTUBO)
+        vm.onEmpezarConteo()
+        vm.onProductoElegido(ProductType.FRASCO_ORINA)
 
-        val estado = vm.uiState.value
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
-        assertEquals(2, estado.screen.paso)
-        assertEquals(ProductType.CRYOTUBO, estado.selectedProduct)
-        assertFalse(estado.quantityError)
+        vm.onDigito("1")
+        vm.onDigito("00")
+        assertEquals("100", vm.uiState.value.quantityInput)
+
+        vm.onDigito("00")
+        assertEquals("10000", vm.uiState.value.quantityInput)
+
+        // Tope de 6 dígitos: el segundo "00" solo alcanza a meter un cero.
+        vm.onDigito("00")
+        assertEquals("100000", vm.uiState.value.quantityInput)
     }
 
     @Test
-    fun siguienteSinProductoRegresaAlPaso1() = runTest {
+    fun productoElegidoSeMuestraEnLaCalculadoraSinCambiarDePantalla() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
+        vm.onEmpezarConteo()
+        vm.onProductoElegido(ProductType.CRYOTUBO)
+
+        val estado = vm.uiState.value
+        assertEquals(Screen.CALCULATOR, estado.screen)
+        assertEquals(ProductType.CRYOTUBO, estado.selectedProduct)
+        assertFalse(estado.quantityError)
+        assertFalse(estado.productError)
+    }
+
+    @Test
+    fun siguienteSinProductoMuestraElAvisoYNoAvanza() = runTest {
+        val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.escribirCantidad("4")
         vm.onSiguiente() // sin producto seleccionado
-        assertEquals(Screen.PICK_PRODUCT, vm.uiState.value.screen)
+
+        val estado = vm.uiState.value
+        assertEquals(Screen.CALCULATOR, estado.screen)
+        assertTrue("productError debe pedir elegir el insumo", estado.productError)
+        assertFalse(estado.quantityError)
+
+        // Al elegir el insumo el aviso se limpia.
+        vm.onEmpezarConteo()
+        vm.onProductoElegido(ProductType.FALCON)
+        assertFalse(vm.uiState.value.productError)
     }
 
     // ---------------------------------------------------------------------
@@ -234,22 +266,21 @@ class InventoryViewModelTest {
     @Test
     fun atrasNuncaPierdeLaCantidadEscrita() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CAJA_COPROLOGICA)
         vm.escribirCantidad("718")
         assertEquals("718", vm.uiState.value.quantityInput)
 
-        vm.onAtras() // Paso 2 → Paso 1
-        assertEquals(Screen.PICK_PRODUCT, vm.uiState.value.screen)
-        assertEquals("718", vm.uiState.value.quantityInput)
-
-        vm.onAtras() // Paso 1 → Inicio
+        vm.onAtras() // Calculadora → Inicio
         assertEquals(Screen.START, vm.uiState.value.screen)
         assertEquals("718", vm.uiState.value.quantityInput)
 
         // Reentrar al registro: la cantidad sigue intacta.
-        vm.onProductoElegido(ProductType.CAJA_COPROLOGICA)
-        assertEquals(Screen.ENTER_QUANTITY, vm.uiState.value.screen)
+        vm.onEmpezarConteo()
+        assertEquals(Screen.CALCULATOR, vm.uiState.value.screen)
         assertEquals("718", vm.uiState.value.quantityInput)
+        assertEquals(ProductType.CAJA_COPROLOGICA, vm.uiState.value.selectedProduct)
     }
 
     // ---------------------------------------------------------------------
@@ -259,6 +290,7 @@ class InventoryViewModelTest {
     @Test
     fun totalActualCopEsCantidadPorPrecioUnitario() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.BACILOSCOPIA) // 9.88
         vm.escribirCantidad("2")
         assertEquals(19.76, vm.uiState.value.totalActualCop, 1e-9)
@@ -374,6 +406,7 @@ class InventoryViewModelTest {
     fun fallaAlGuardarMantieneElPaso3YElErrorReintentable() = runTest {
         val vm = crearViewModel()
         dao.fallarInsert = true
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("4")
         vm.onSiguiente()
@@ -390,33 +423,37 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun guardarSinProductoNoPersisteYVuelveAlPaso1() = runTest {
+    fun guardarSinProductoNoPersisteYMuestraElAviso() = runTest {
         val vm = crearViewModel()
         vm.onConfirmarGuardar() // sin producto elegido
         scheduler.runCurrent()
-        assertEquals(Screen.PICK_PRODUCT, vm.uiState.value.screen)
+        val estado = vm.uiState.value
+        assertEquals(Screen.CALCULATOR, estado.screen)
+        assertTrue("Sin producto debe pedir elegir el insumo", estado.productError)
         assertEquals(0, dao.insertados.size)
     }
 
     @Test
     fun guardarConCantidadCeroNoPersiste() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FRASCO_ORINA) // cantidad sigue "0"
         vm.onConfirmarGuardar()
         scheduler.runCurrent()
-        assertEquals(Screen.ENTER_QUANTITY, vm.uiState.value.screen)
+        assertEquals(Screen.CALCULATOR, vm.uiState.value.screen)
         assertTrue(vm.uiState.value.quantityError)
         assertEquals(0, dao.insertados.size)
     }
 
     @Test
-    fun guardarSoloDebeOcurrirDesdeElPaso3() = runTest {
-        // REQUISITO: Screen.CONFIRM (Paso 3) es la "única vía de guardar"
-        // (Screen.kt) / "guardar solo desde el Paso 3" (qa.md).
+    fun guardarSoloDebeOcurrirDesdeRevision() = runTest {
+        // REQUISITO: Screen.CONFIRM (revisión) es la "única vía de guardar"
+        // (Screen.kt) / "guardar solo desde la revisión" (qa.md).
         val vm = crearViewModel()
-        vm.onProductoElegido(ProductType.FRASCO_ORINA) // estamos en el Paso 2
+        vm.onEmpezarConteo()
+        vm.onProductoElegido(ProductType.FRASCO_ORINA) // estamos en la calculadora
         vm.escribirCantidad("5")
-        assertEquals(Screen.ENTER_QUANTITY, vm.uiState.value.screen)
+        assertEquals(Screen.CALCULATOR, vm.uiState.value.screen)
 
         vm.onConfirmarGuardar() // nadie debería poder persistir sin pasar por CONFIRM
         scheduler.runCurrent()
@@ -427,7 +464,7 @@ class InventoryViewModelTest {
             0,
             dao.insertados.size,
         )
-        assertEquals(Screen.ENTER_QUANTITY, vm.uiState.value.screen)
+        assertEquals(Screen.CALCULATOR, vm.uiState.value.screen)
     }
 
     // ---------------------------------------------------------------------
@@ -494,54 +531,14 @@ class InventoryViewModelTest {
     }
 
     // ---------------------------------------------------------------------
-    // OCR: nunca destrutivo
-    // ---------------------------------------------------------------------
-
-    @Test
-    fun ocrFallidoMuestraElMensajeSinBorrarLaCantidad() = runTest {
-        val vm = crearViewModel()
-        vm.onProductoElegido(ProductType.FALCON)
-        vm.escribirCantidad("42")
-
-        vm.onEscanearResultado(null)
-
-        val estado = vm.uiState.value
-        assertEquals(InventoryViewModel.MENSAJE_OCR_FALLIDO, estado.ocrMessage)
-        assertEquals(
-            "No pude leer el número. Escríbelo tú mismo.",
-            estado.ocrMessage,
-        )
-        assertEquals(
-            "El OCR fallido NUNCA borra lo que el usuario escribió",
-            "42",
-            estado.quantityInput,
-        )
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
-    }
-
-    @Test
-    fun ocrExitosoSobreescribeLaCantidadYLimpiaElMensaje() = runTest {
-        val vm = crearViewModel()
-        vm.onProductoElegido(ProductType.FALCON)
-        vm.escribirCantidad("9")
-        vm.onEscanearResultado(7)
-
-        assertEquals("7", vm.uiState.value.quantityInput)
-        assertNull(vm.uiState.value.ocrMessage)
-
-        // Un número enorme se limita al tope (999.999).
-        vm.onEscanearResultado(1_500_000)
-        assertEquals("999999", vm.uiState.value.quantityInput)
-    }
-
-    // ---------------------------------------------------------------------
-    // Lote: varios productos en una sesión (feedback del usuario)
+    // Lote: varios productos en una sesión
     // ---------------------------------------------------------------------
 
     @Test
     fun agregarOtroNoPersisteHastaGuardar() = runTest {
         val hoy = LocalDate.now()
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
@@ -566,7 +563,7 @@ class InventoryViewModelTest {
         assertEquals(hoy.get(campos.weekBasedYear()), draft.year)
 
         // Vuelve al Paso 1 con la selección limpia; el lote ya suma en los derivados.
-        assertEquals(Screen.PICK_PRODUCT, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
         assertNull(estado.selectedProduct)
         assertEquals("0", estado.quantityInput)
         assertEquals(3, estado.cantidadLote) // pendientes 3 + actual 0
@@ -577,15 +574,18 @@ class InventoryViewModelTest {
     fun guardarLoteInsertaPendientesYActualConIdsReales() = runTest {
         val vm = crearViewModel()
         // Dos productos se agregan al lote...
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
         vm.onAgregarOtro()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FALCON)
         vm.escribirCantidad("2")
         vm.onSiguiente()
         vm.onAgregarOtro()
         // ...y el tercero queda como item ACTUAL en el Paso 3.
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FRASCO_ORINA)
         vm.escribirCantidad("5")
         vm.onSiguiente()
@@ -622,15 +622,18 @@ class InventoryViewModelTest {
     @Test
     fun quitarPendienteEliminaSoloEseItemYPermaneceEnConfirm() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
         vm.onAgregarOtro()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FALCON)
         vm.escribirCantidad("2")
         vm.onSiguiente()
         vm.onAgregarOtro()
         // Item actual para volver al Paso 3 con el lote de 2.
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.BACILOSCOPIA)
         vm.escribirCantidad("1")
         vm.onSiguiente()
@@ -640,7 +643,7 @@ class InventoryViewModelTest {
         vm.onQuitarPendiente(0)
 
         val estado = vm.uiState.value
-        assertEquals("Permanece en el Paso 3", Screen.CONFIRM, estado.screen)
+        assertEquals("Permanece en la revisión", Screen.CONFIRM, estado.screen)
         assertEquals(1, estado.itemsPendientes.size)
         assertEquals("Quitó el primero (Cryotubo) y conserva Falcon", "Falcon", estado.itemsPendientes[0].productName)
         assertEquals("Quitar del lote NO persiste nada", 0, dao.insertados.size)
@@ -652,10 +655,12 @@ class InventoryViewModelTest {
     @Test
     fun deshacerLoteBorraPorPkYRestauraLaListaEnElPaso3() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
         vm.onAgregarOtro()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CAJA_COPROLOGICA)
         vm.escribirCantidad("4")
         vm.onSiguiente()
@@ -690,8 +695,9 @@ class InventoryViewModelTest {
     // ---------------------------------------------------------------------
 
     @Test
-    fun imagenConUnNumeroLlenaLaCantidadYLimpiaElMensaje() = runTest {
+    fun imagenConUnNumeroPideConfirmacionSinTocarLaCantidad() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FALCON)
         vm.escribirCantidad("7")
 
@@ -699,21 +705,28 @@ class InventoryViewModelTest {
         vm.onImagenLeida(emptyList())
         assertEquals(InventoryViewModel.MENSAJE_IMAGEN_FALLIDO, vm.uiState.value.ocrMessage)
 
-        // …y una lectura con EXACTAMENTE 1 número lo carga y limpia el mensaje.
+        // …y una lectura con UN número NO llena sola: pide confirmación
+        // (la letra manuscrita se confunde con facilidad).
         vm.onImagenLeida(listOf(42))
 
         val estado = vm.uiState.value
-        assertEquals("42", estado.quantityInput)
+        assertEquals("La foto NO toca la cantidad hasta confirmar", "7", estado.quantityInput)
+        assertEquals(listOf(42), estado.ocrCandidatos)
         assertNull("La lectura limpia el mensaje de fallo previo", estado.ocrMessage)
-        assertTrue("Sin candidatos cuando hubo un solo número", estado.ocrCandidatos.isEmpty())
         assertFalse(estado.quantityError)
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
         assertEquals("La foto jamás persiste", 0, dao.insertados.size)
+
+        // Al confirmar, sí pasa a ser la cantidad.
+        vm.onCandidatoElegido(42)
+        assertEquals("42", vm.uiState.value.quantityInput)
+        assertTrue(vm.uiState.value.ocrCandidatos.isEmpty())
     }
 
     @Test
     fun imagenConVariosNumerosMuestraCandidatosSinTocarLaCantidad() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("7") // lo que la persona venía escribiendo
 
@@ -727,13 +740,14 @@ class InventoryViewModelTest {
             estado.quantityInput,
         )
         assertNull(estado.ocrMessage)
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
         assertEquals(0, dao.insertados.size)
     }
 
     @Test
     fun imagenSinNumerosMuestraElMensajeFallidoConservandoLaCantidad() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FALCON)
         vm.escribirCantidad("25")
 
@@ -742,7 +756,7 @@ class InventoryViewModelTest {
         val estado = vm.uiState.value
         assertEquals(InventoryViewModel.MENSAJE_IMAGEN_FALLIDO, estado.ocrMessage)
         assertEquals(
-            "No pude leer números en la imagen. Escríbelo tú mismo.",
+            "No pude leer números en la foto. Escríbelo tú mismo.",
             estado.ocrMessage,
         )
         assertEquals(
@@ -751,12 +765,13 @@ class InventoryViewModelTest {
             estado.quantityInput,
         )
         assertTrue(estado.ocrCandidatos.isEmpty())
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
     }
 
     @Test
     fun candidatoElegidoCargaLaCantidadYCierraLosCandidatos() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO) // la foto solo se ofrece en el Paso 2
         vm.onImagenLeida(listOf(10, 25))
 
@@ -767,7 +782,7 @@ class InventoryViewModelTest {
         assertTrue("Al elegir se cierra la selección", estado.ocrCandidatos.isEmpty())
         assertNull(estado.ocrMessage)
         assertFalse(estado.quantityError)
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
 
         // Mismos topes que el teclado: > 999.999 se limita al tope.
         vm.onImagenLeida(listOf(10, 25))
@@ -779,6 +794,7 @@ class InventoryViewModelTest {
     @Test
     fun cerrarCandidatosConservaLaCantidadEscrita() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("7")
         vm.onImagenLeida(listOf(10, 25))
@@ -792,13 +808,14 @@ class InventoryViewModelTest {
             "7",
             estado.quantityInput,
         )
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
         assertEquals(0, dao.insertados.size)
     }
 
     @Test
     fun imagenConUnNumeroSobreElTopeSeOmiteYConservaLaCantidad() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FALCON)
         vm.escribirCantidad("3")
 
@@ -809,7 +826,7 @@ class InventoryViewModelTest {
         assertEquals(InventoryViewModel.MENSAJE_IMAGEN_FALLIDO, estado.ocrMessage)
         assertEquals("3", estado.quantityInput)
         assertTrue(estado.ocrCandidatos.isEmpty())
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
+        assertEquals(Screen.CALCULATOR, estado.screen)
     }
 
     @Test
@@ -832,42 +849,45 @@ class InventoryViewModelTest {
     // ---------------------------------------------------------------------
 
     @Test
-    fun agregarOtroSoloAgregaDesdeElPaso3() = runTest {
+    fun agregarOtroSoloAgregaDesdeRevision() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
-        // Estamos en el PASO 2 (ENTER_QUANTITY): el guard "solo desde CONFIRM"
-        // debe hacer no-op — ni agrega, ni cambia de pantalla, ni limpia nada.
+        // Estamos en la CALCULADORA: el guard "solo desde CONFIRM" debe hacer
+        // no-op — ni agrega, ni cambia de pantalla, ni limpia nada.
         vm.onAgregarOtro()
 
         val estado = vm.uiState.value
-        assertEquals(Screen.ENTER_QUANTITY, estado.screen)
-        assertTrue("No debe agregar nada fuera del Paso 3", estado.itemsPendientes.isEmpty())
+        assertEquals(Screen.CALCULATOR, estado.screen)
+        assertTrue("No debe agregar nada fuera de la revisión", estado.itemsPendientes.isEmpty())
         assertEquals("3", estado.quantityInput)
         assertEquals(ProductType.CRYOTUBO, estado.selectedProduct)
         assertEquals(0, dao.insertados.size)
     }
 
     @Test
-    fun agregarOtroSinProductoVuelveAlPaso1SinAgregar() = runTest {
+    fun agregarOtroSinProductoTambienPideInsumo() = runTest {
         val vm = crearViewModel() // INICIO, sin producto elegido
         vm.onAgregarOtro()
 
         val estado = vm.uiState.value
-        // Mismo guard que guardar: sin producto → Paso 1, sin agregar ni persistir.
-        assertEquals(Screen.PICK_PRODUCT, estado.screen)
+        // Mismo guard que guardar: sin producto → aviso, sin agregar ni persistir.
+        assertEquals(Screen.CALCULATOR, estado.screen)
+        assertTrue(estado.productError)
         assertTrue(estado.itemsPendientes.isEmpty())
         assertEquals(0, dao.insertados.size)
     }
 
     @Test
-    fun continuarLoteDesdeElInicioAbreElPaso3ConLaLista() = runTest {
+    fun continuarLoteDesdeElInicioAbreLaRevisionConLaLista() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
-        vm.onAgregarOtro() // lista = [Cryotubo × 3], pantalla = Paso 1
-        vm.onAtras() // Paso 1 → INICIO (el lote NO debe limpiarse en el camino)
+        vm.onAgregarOtro() // lista = [Cryotubo × 3], pantalla = calculadora
+        vm.onAtras() // calculadora → INICIO (el lote NO debe limpiarse en el camino)
         assertEquals(Screen.START, vm.uiState.value.screen)
         assertEquals(1, vm.uiState.value.itemsPendientes.size)
 
@@ -890,18 +910,19 @@ class InventoryViewModelTest {
         vm.onContinuarLote()
         assertEquals(Screen.START, vm.uiState.value.screen)
 
-        // (b) Con lista pero FUERA de INICIO (Paso 1 tras Agregar otro) → no-op.
+        // (b) Con lista pero FUERA de INICIO (calculadora tras Agregar otro) → no-op.
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
         vm.onAgregarOtro()
-        assertEquals(Screen.PICK_PRODUCT, vm.uiState.value.screen)
+        assertEquals(Screen.CALCULATOR, vm.uiState.value.screen)
 
         vm.onContinuarLote()
 
         assertEquals(
             "Fuera de START onContinuarLote no debe navegar",
-            Screen.PICK_PRODUCT,
+            Screen.CALCULATOR,
             vm.uiState.value.screen,
         )
         assertEquals(1, vm.uiState.value.itemsPendientes.size) // la lista no se toca
@@ -909,12 +930,14 @@ class InventoryViewModelTest {
     }
 
     @Test
-    fun quitarElUltimoPendienteDejaLaListaVaciaSinSalirDelPaso3() = runTest {
+    fun quitarElUltimoPendienteDejaLaListaVaciaSinSalirDeRevision() = runTest {
         val vm = crearViewModel()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.CRYOTUBO)
         vm.escribirCantidad("3")
         vm.onSiguiente()
         vm.onAgregarOtro()
+        vm.onEmpezarConteo()
         vm.onProductoElegido(ProductType.FALCON)
         vm.escribirCantidad("2")
         vm.onSiguiente()
@@ -924,7 +947,7 @@ class InventoryViewModelTest {
         vm.onQuitarPendiente(0) // quita el ÚNICO pendiente
 
         val estado = vm.uiState.value
-        assertEquals("Permanece en el Paso 3", Screen.CONFIRM, estado.screen)
+        assertEquals("Permanece en la revisión", Screen.CONFIRM, estado.screen)
         assertTrue("La lista queda vacía (solo resta el item actual)", estado.itemsPendientes.isEmpty())
         assertEquals(2, estado.cantidadLote) // solo el item actual: 2 Falcon
         assertEquals(15.80, estado.totalLoteCop, 1e-9) // 2 × 7.90

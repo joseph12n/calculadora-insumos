@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Solo requerido si la persona usa el botón opcional "Escanear número" -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
+    <!--
+      La app NO pide permiso de cámara: para leer la hoja abre la cámara del
+      sistema con ActivityResultContracts.TakePicture (la foto se escribe en una
+      URI temporal propia vía FileProvider). Solo se usa ML Kit on-device.
+    -->
 
     <application
         android:allowBackup="true"
@@ -23,6 +23,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- URIs content:// temporales para que la cámara del sistema escriba
+             la foto en la caché de la app (sin permisos de almacenamiento). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

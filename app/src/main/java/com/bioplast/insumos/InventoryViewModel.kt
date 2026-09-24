@@ -37,16 +37,16 @@ private fun semanaIsoDe(fecha: LocalDate): Int =
     fecha.get(WeekFields.of(Locale.getDefault()).weekOfWeekBasedYear())
 
 /**
- * Estado único (UDF) que consume la UI para dibujar las 7 pantallas.
+ * Estado único (UDF) que consume la UI para dibujar las pantallas.
  *
  * Es un `data class` inmutable: la ViewModel nunca lo muta, solo emite copias vía
  * `MutableStateFlow.update`. Los campos de sesión (`selectedProduct`, `quantityInput`,
  * errores) se limpian al volver a [Screen.START]; los campos reactivos (`weeklySummary`,
  * `weeklySummaries`, `recordsForSelectedWeek`) vienen de Room y nunca se tocan a mano.
  *
- * @property screen Pantalla actual del flujo de 7 pasos.
- * @property selectedProduct Insumo elegido en el Paso 1; `null` mientras no se elija.
- * @property quantityInput Dígitos escritos en el Paso 2; `"0"` por defecto (String para
+ * @property screen Pantalla actual del flujo.
+ * @property selectedProduct Insumo elegido en la calculadora; `null` mientras no se elija.
+ * @property quantityInput Dígitos escritos en la calculadora; `"0"` por defecto (String para
  *   conservar el tecleo tal cual; leer la cantidad con [cantidad]).
  * @property itemsPendientes Lote en memoria de la sesión: drafts (`id = 0`) con
  *   fecha/semana/año ya calculados, en orden de guardado. Se arma en CONFIRM con
@@ -61,23 +61,25 @@ private fun semanaIsoDe(fecha: LocalDate): Int =
  * @property recordsForSelectedWeek Desglose de la semana elegida en el historial
  *   (se rellena solo al llamar [InventoryViewModel.onElegirSemana]).
  * @property selectedDate Fecha que llevará el registro; por defecto hoy
- *   (el Paso 3 debe ofrecer el selector de fecha; ver [InventoryViewModel.onFechaElegida]).
- * @property quantityError `true` → el Paso 2 muestra error y DEBE mantener "Siguiente"
- *   deshabilitado. Se pone en [InventoryViewModel.onSiguiente] si cantidad < 1 y se
- *   borra al escribir/borrar dígitos.
+ *   (la revisión ofrece el selector de fecha; ver [InventoryViewModel.onFechaElegida]).
+ * @property quantityError `true` → la calculadora muestra el aviso rojo "Primero
+ *   escribe cuántos". Se pone en [InventoryViewModel.onSiguiente] si cantidad < 1 y
+ *   se borra al escribir/borrar dígitos. SEGUIR sigue tocable para volver a validar.
+ * @property productError `true` → la calculadora pide elegir el insumo (aviso rojo) y no
+ *   avanza. Se pone en [InventoryViewModel.onSiguiente]/[InventoryViewModel.onConfirmarGuardar]
+ *   si no hay producto y se borra al elegirlo o al volver.
  * @property savingError Mensaje de error de persistencia en lenguaje cotidiano (`null` = sin error).
  * @property selectedWeek Semana seleccionada en el historial (`null` fuera de [Screen.DAY_DETAIL]).
- * @property ocrMessage Mensaje cuando el OCR falla (`null` = sin fallas). Nunca borra
- *   [quantityInput]: la UI lo muestra junto al campo para que el usuario escriba a mano.
- *   Compartido por el OCR de cámara en vivo (`MENSAJE_OCR_FALLIDO`) y el de FOTO de
- *   galería (`MENSAJE_IMAGEN_FALLIDO`).
+ * @property ocrMessage Mensaje cuando la lectura de la FOTO falla (`null` = sin fallas).
+ *   Nunca borra [quantityInput]: la UI lo muestra junto al visor para que la persona
+ *   escriba a mano. Lo pinta `MENSAJE_IMAGEN_FALLIDO`.
  * @property ocrCandidatos Números leídos de una FOTO cuando hubo VARIOS: la UI muestra
- *   chips para que la persona elija ([InventoryViewModel.onCandidatoElegido]); vacío
+ *   un diálogo para que la persona elija ([InventoryViewModel.onCandidatoElegido]); vacío
  *   cuando no hay selección de candidatos en curso ([InventoryViewModel.onCerrarCandidatos]).
  * @property loading `true` mientras no llega la primera emisión de Room (primer frame de carga).
  * @property dataError `true` si la base de datos local no está disponible (no se pudieron
  *   cargar los flujos). Señal para mostrar un estado de error reintentable en la UI.
- * @property isSaving `true` mientras se persiste el registro (Paso 3): la UI deshabilita
+ * @property isSaving `true` mientras se persiste el registro (revisión): la UI deshabilita
  *   botones para evitar dobles toques.
  * @property anioActual Año (semana-local) de hoy, para la tarjeta de resumen.
  * @property semanaActual Número de semana de hoy, para la tarjeta de resumen.
@@ -92,6 +94,7 @@ data class InventoryUiState(
     val recordsForSelectedWeek: List<InventoryRecord> = emptyList(),
     val selectedDate: LocalDate = LocalDate.now(),
     val quantityError: Boolean = false,
+    val productError: Boolean = false,
     val savingError: String? = null,
     val selectedWeek: WeeklySummary? = null,
     val ocrMessage: String? = null,
@@ -128,9 +131,9 @@ data class InventoryUiState(
 }
 
 /**
- * ViewModel (MVVM + UDF) del flujo lineal de 7 pasos:
- * START → PICK_PRODUCT (1) → ENTER_QUANTITY (2) → CONFIRM (3) → SUCCESS (Deshacer ~5 s) → START,
- * más HISTORY → DAY_DETAIL (borrado por fila).
+ * ViewModel (MVVM + UDF) del flujo lineal:
+ * START → CALCULATOR (insumo + cantidad + total en vivo) → CONFIRM (revisar/guardar)
+ * → SUCCESS (Deshacer ~5 s) → START, más HISTORY → DAY_DETAIL (borrado por fila).
  *
  * - Estado: un único [MutableStateFlow] con [InventoryUiState]; la UI solo emite eventos
  *   (los métodos `onX`) y dibuja el estado (StateFlow).
@@ -231,15 +234,18 @@ class InventoryViewModel(
     }
 
     // ---------------------------------------------------------------------
-    // Paso 1: producto
+    // Calculadora: producto + cantidad (teclado propio)
     // ---------------------------------------------------------------------
 
-    /** Elige el insumo y avanza al Paso 2 (cantidad). Conserva lo ya tecleado. */
+    /**
+     * Elige el insumo y lo refleja en el visor de la calculadora (sin cambiar de
+     * pantalla). Conserva lo ya tecleado y limpia errores/mensajes.
+     */
     fun onProductoElegido(producto: ProductType) {
         _uiState.update {
             it.copy(
-                screen = Screen.ENTER_QUANTITY,
                 selectedProduct = producto,
+                productError = false,
                 quantityError = false,
                 ocrMessage = null,
                 savingError = null,
@@ -248,23 +254,23 @@ class InventoryViewModel(
     }
 
     // ---------------------------------------------------------------------
-    // Paso 2: cantidad (teclado propio + OCR opcional)
+    // Cantidad: teclado propio + lectura de foto (OCR)
     // ---------------------------------------------------------------------
 
     /**
-     * Agrega un dígito al campo de cantidad (acepta `onDigito("7")`; usa el último
-     * carácter si mandan más de uno). Evita ceros a la izquierda, limita a
-     * [MAXIMO_DIGITOS_CANTIDAD] dígitos y limpia `quantityError`/`ocrMessage`.
+     * Agrega los dígitos tocados (acepta "7" y también "00") al campo de cantidad.
+     * Evita ceros a la izquierda, limita a [MAXIMO_DIGITOS_CANTIDAD] dígitos y
+     * limpia `quantityError`/`ocrMessage`. Ignora lo que no sean dígitos.
      */
     fun onDigito(digito: String) {
-        val nuevoDigito = digito.lastOrNull()?.takeIf { it.isDigit() } ?: return
+        val digitos = digito.filter { it.isDigit() }
+        if (digitos.isEmpty()) return
         _uiState.update { estado ->
             val actual = estado.quantityInput
             val agregado = when {
-                actual == "0" -> nuevoDigito.toString()
-                actual.length >= MAXIMO_DIGITOS_CANTIDAD -> actual
-                else -> actual + nuevoDigito
-            }
+                actual == "0" -> digitos.trimStart('0').ifEmpty { "0" }
+                else -> actual + digitos
+            }.take(MAXIMO_DIGITOS_CANTIDAD)
             estado.copy(quantityInput = agregado, quantityError = false, ocrMessage = null)
         }
     }
@@ -281,70 +287,29 @@ class InventoryViewModel(
         }
     }
 
-    /**
-     * Resultado del OCR (botón opcional de cámara):
-     * - `numero != null` → sobreescribe la cantidad con ese entero y limpia el mensaje.
-     * - `numero == null` → solo muestra [MENSAJE_OCR_FALLIDO] en `ocrMessage`;
-     *   **conserva intacto** lo que el usuario ya había escrito.
-     */
-    fun onEscanearResultado(numero: Int?) {
-        if (numero == null) {
-            _uiState.update { it.copy(ocrMessage = MENSAJE_OCR_FALLIDO) }
-            return
-        }
-        val limitado = numero.coerceIn(0, MAXIMO_VALOR_CANTIDAD)
-        _uiState.update {
-            it.copy(
-                quantityInput = limitado.toString(),
-                quantityError = false,
-                ocrMessage = null,
-            )
-        }
-    }
-
     // ---------------------------------------------------------------------
-    // OCR de imagen (FOTO de la galería): camino secundario del "¿Cuántos?"
+    // OCR de FOTO: la persona fotografía la hoja y elige el número leído
     // ---------------------------------------------------------------------
 
     /**
-     * Resultado de leer una FOTO elegida de la galería (la UI llama a
-     * `camera.extraerNumerosDeImagen(context, uri)` y entrega aquí la lista):
-     * - **Vacía** → [MENSAJE_IMAGEN_FALLIDO] en `ocrMessage`; **conserva** `quantityInput`.
-     * - **Exactamente 1** → lo carga en `quantityInput` si está en
-     *   `0..MAXIMO_VALOR_CANTIDAD` (topes del teclado propio); si es mayor de 999.999
-     *   se OMITE y se pone [MENSAJE_IMAGEN_FALLIDO] (conservando lo escrito).
-     *   Limpia `ocrCandidatos`, `ocrMessage` y `quantityError`.
-     * - **Varios** → `ocrCandidatos` = la lista (hasta [MAXIMO_CANDIDATOS_IMAGEN]) y
-     *   `ocrMessage = null`; **`quantityInput` queda INTACTO** hasta que la persona
-     *   elija con [onCandidatoElegido] (o escriba a mano tras [onCerrarCandidatos]).
+     * Resultado de leer una FOTO (tomada con la cámara del sistema; la UI llama a
+     * `camera.leerNumerosDeFoto` y entrega aquí los números):
+     * - **Vacía** (o todos los leídos fuera de `0..MAXIMO_VALOR_CANTIDAD`) →
+     *   [MENSAJE_IMAGEN_FALLIDO] en `ocrMessage`; **conserva** `quantityInput`.
+     * - **Con números** → `ocrCandidatos` = la lista (hasta [MAXIMO_CANDIDATOS_IMAGEN])
+     *   y `ocrMessage = null`; **`quantityInput` queda INTACTO** hasta que la persona
+     *   confirme con [onCandidatoElegido]. SIEMPRE se confirma (aunque la foto haya
+     *   dado un solo número): la letra manuscrita se confunde con facilidad (1/7/4/8)
+     *   y el diálogo muestra el recorte de la letra para comparar.
      */
     fun onImagenLeida(numeros: List<Int>) {
-        val candidatos = numeros.take(MAXIMO_CANDIDATOS_IMAGEN)
-        when {
-            candidatos.isEmpty() -> _uiState.update {
-                it.copy(ocrMessage = MENSAJE_IMAGEN_FALLIDO) // conserva quantityInput
-            }
-
-            candidatos.size == 1 -> {
-                val numero = candidatos.first()
-                if (numero !in 0..MAXIMO_VALOR_CANTIDAD) {
-                    // Más de 999.999 no es una cantidad escribible: se omite.
-                    _uiState.update { it.copy(ocrMessage = MENSAJE_IMAGEN_FALLIDO) }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            quantityInput = numero.toString(),
-                            quantityError = false,
-                            ocrCandidatos = emptyList(),
-                            ocrMessage = null,
-                        )
-                    }
-                }
-            }
-
-            else -> _uiState.update {
-                it.copy(ocrCandidatos = candidatos, ocrMessage = null) // quantityInput intacto
-            }
+        val candidatos = numeros
+            .filter { it in 0..MAXIMO_VALOR_CANTIDAD }
+            .take(MAXIMO_CANDIDATOS_IMAGEN)
+        if (candidatos.isEmpty()) {
+            _uiState.update { it.copy(ocrMessage = MENSAJE_IMAGEN_FALLIDO) }
+        } else {
+            _uiState.update { it.copy(ocrCandidatos = candidatos, ocrMessage = null) }
         }
     }
 
@@ -366,30 +331,32 @@ class InventoryViewModel(
         }
     }
 
-    /** Botón "Volver / Escribir a mano": cierra los chips sin tocar `quantityInput`. */
+    /** Botón "✍️ Escribir a mano": cierra los candidatos sin tocar `quantityInput`. */
     fun onCerrarCandidatos() {
         _uiState.update { it.copy(ocrCandidatos = emptyList()) }
     }
 
     /**
-     * Valida la cantidad (≥ 1) y avanza al Paso 3.
-     * Si no pasa la validación: `quantityError = true` (la UI mantiene "Siguiente"
-     * deshabilitado) y NO se cambia de pantalla. Si no hay producto, vuelve al Paso 1.
+     * Valida la calculadora y avanza al paso de revisión:
+     * - Sin producto → `productError = true` (aviso "Primero elige el insumo") y NO avanza.
+     * - Cantidad < 1 → `quantityError = true` (aviso "Primero escribe cuántos") y NO avanza.
+     * - Correcto → [Screen.CONFIRM].
      */
     fun onSiguiente() {
         _uiState.update { estado ->
             val cantidad = estado.quantityInput.toIntOrNull() ?: 0
             when {
                 estado.selectedProduct == null ->
-                    estado.copy(screen = Screen.PICK_PRODUCT, quantityError = false)
+                    estado.copy(productError = true, quantityError = false)
 
                 cantidad < 1 ->
-                    estado.copy(quantityError = true)
+                    estado.copy(quantityError = true, productError = false)
 
                 else ->
                     estado.copy(
                         screen = Screen.CONFIRM,
                         quantityError = false,
+                        productError = false,
                         ocrMessage = null,
                         savingError = null,
                     )
@@ -402,11 +369,11 @@ class InventoryViewModel(
     // ---------------------------------------------------------------------
 
     /**
-     * Agrega el item actual (Paso 3) a [InventoryUiState.itemsPendientes] como draft
-     * (`id = 0`, con fecha/semana/año de [InventoryUiState.selectedDate]) y vuelve al
-     * Paso 1 para elegir el siguiente insumo; limpia la selección actual (producto,
+     * Agrega el item actual al lote ([InventoryUiState.itemsPendientes]) como draft
+     * (`id = 0`, con fecha/semana/año de [InventoryUiState.selectedDate]) y vuelve a la
+     * calculadora para elegir el siguiente insumo; limpia la selección actual (producto,
      * cantidad → `"0"` y fecha → hoy). Mismas validaciones que guardar: sin producto →
-     * PICK_PRODUCT; cantidad < 1 → ENTER_QUANTITY con `quantityError` y NO agrega.
+     * `productError`; cantidad < 1 → `quantityError` y NO agrega.
      * Solo actúa desde CONFIRM. **NO persiste nada**: el lote se guarda con
      * [onConfirmarGuardar].
      */
@@ -414,26 +381,27 @@ class InventoryViewModel(
         val estado = _uiState.value
         val producto = estado.selectedProduct
         if (producto == null) {
-            _uiState.update { it.copy(screen = Screen.PICK_PRODUCT) }
+            _uiState.update { it.copy(screen = Screen.CALCULATOR, productError = true) }
             return
         }
         val cantidad = estado.quantityInput.toIntOrNull()
         if (cantidad == null || cantidad < 1) {
-            _uiState.update { it.copy(screen = Screen.ENTER_QUANTITY, quantityError = true) }
+            _uiState.update { it.copy(screen = Screen.CALCULATOR, quantityError = true) }
             return
         }
 
-        // Mismo guard que guardar: el lote SOLO se edita desde el Paso 3 (CONFIRM).
+        // Mismo guard que guardar: el lote SOLO se edita desde el paso de revisión.
         if (estado.screen != Screen.CONFIRM) return
 
         val draft = crearRegistro(producto, cantidad, estado.selectedDate)
         _uiState.update {
             it.copy(
                 itemsPendientes = it.itemsPendientes + draft,
-                screen = Screen.PICK_PRODUCT, // listo para elegir el siguiente insumo
+                screen = Screen.CALCULATOR, // listo para el siguiente insumo
                 selectedProduct = null,
                 quantityInput = "0",
                 quantityError = false,
+                productError = false,
                 ocrMessage = null,
                 selectedDate = LocalDate.now(),
             )
@@ -493,11 +461,10 @@ class InventoryViewModel(
     }
 
     /**
-     * Botón "➕ CONTAR INSUMOS" del Inicio: START → PICK_PRODUCT siempre (Paso 1),
+     * Botón "➕ CONTAR INSUMOS" del Inicio: START → CALCULATOR siempre,
      * independientemente de que haya producto/cantidad preservados de una cadena de
-     * "Atrás" — "empezar a contar" siempre enseña el Paso 1. La selección
-     * (producto/cantidad) se conserva a propósito: si la persona reingresa al Paso 2,
-     * su número escrito sigue ahí. Solo limpia flags de error/OCR.
+     * "Atrás". La selección (producto/cantidad) se conserva a propósito: si la persona
+     * reingresa, su número escrito sigue ahí. Solo limpia flags de error/OCR.
      * No-op si no estás en START o hay un guardado en curso.
      */
     fun onEmpezarConteo() {
@@ -506,8 +473,9 @@ class InventoryViewModel(
                 estado.screen != Screen.START -> estado
                 estado.isSaving -> estado
                 else -> estado.copy(
-                    screen = Screen.PICK_PRODUCT,
+                    screen = Screen.CALCULATOR,
                     quantityError = false,
+                    productError = false,
                     savingError = null,
                     ocrMessage = null,
                     ocrCandidatos = emptyList(),
@@ -521,9 +489,9 @@ class InventoryViewModel(
     // ---------------------------------------------------------------------
 
     /**
-     * Recorrido inverso: CONFIRM → ENTER_QUANTITY → PICK_PRODUCT → START;
-     * DAY_DETAIL → HISTORY → START. **Preserva `quantityInput`** (y el producto)
-     * en toda la cadena; solo se apagan los flags de error.
+     * Recorrido inverso: CONFIRM → CALCULATOR → START; DAY_DETAIL → HISTORY → START.
+     * **Preserva `quantityInput`** (y el producto) en toda la cadena; solo se apagan
+     * los flags de error.
      * Desde SUCCESS vuelve a START limpiando (equivale a [onListo]).
      */
     fun onAtras() {
@@ -533,14 +501,16 @@ class InventoryViewModel(
         _uiState.update { estado ->
             when (estado.screen) {
                 Screen.CONFIRM ->
-                    estado.copy(screen = Screen.ENTER_QUANTITY, savingError = null)
+                    estado.copy(screen = Screen.CALCULATOR, savingError = null)
 
-                Screen.ENTER_QUANTITY ->
-                    // quantityInput PRESERVADO (se conserva para volver al Paso 1).
-                    estado.copy(screen = Screen.PICK_PRODUCT, quantityError = false, ocrMessage = null)
-
-                Screen.PICK_PRODUCT ->
-                    estado.copy(screen = Screen.START, quantityError = false, ocrMessage = null)
+                // quantityInput y producto PRESERVADOS (se conservan al volver).
+                Screen.CALCULATOR ->
+                    estado.copy(
+                        screen = Screen.START,
+                        quantityError = false,
+                        productError = false,
+                        ocrMessage = null,
+                    )
 
                 Screen.DAY_DETAIL ->
                     estado.copy(
@@ -569,18 +539,6 @@ class InventoryViewModel(
             }
             else -> Unit
         }
-    }
-
-    /**
-     * Cancela el registro en curso y vuelve a START limpiando la sesión (producto,
-     * cantidad, errores, la lista de pendientes y la fecha vuelve a hoy). No se guarda
-     * nada: la persistencia SOLO ocurre en [onConfirmarGuardar].
-     */
-    fun onCancelar() {
-        if (_uiState.value.isSaving) return // no interrumpir un guardado en curso
-        ventanaDeshacerJob?.cancel()
-        ventanaDeshacerJob = null
-        _uiState.update { estadoEnInicio(it) }
     }
 
     /** Botón "Listo" de SUCCESS: vuelve a START limpiando la sesión (incluida la lista de
@@ -643,7 +601,7 @@ class InventoryViewModel(
     }
 
     // ---------------------------------------------------------------------
-    // Paso 3: guardado + ventana de deshacer
+    // Revisión: guardado + ventana de deshacer
     // ---------------------------------------------------------------------
 
     /**
@@ -651,9 +609,9 @@ class InventoryViewModel(
      *
      * Guarda el LOTE completo: [InventoryUiState.itemsPendientes] en orden y, si el item
      * actual es válido (producto + cantidad ≥ 1), este al final. Si NO hay lote, mandan
-     * las validaciones de siempre (sin producto → PICK_PRODUCT; cantidad < 1 →
-     * ENTER_QUANTITY + `quantityError`); si el lote NO está vacío, un item actual
-     * inválido se omite sin más (así se guarda solo la lista).
+     * las validaciones de siempre (sin producto → `productError`; cantidad < 1 →
+     * `quantityError`, sin salir de la pantalla); si el lote NO está vacío, un item
+     * actual inválido se omite sin más (así se guarda solo la lista).
      *
      * Cada [InventoryRecord] usa la fecha elegida (hoy por defecto) con año/semana de ESA
      * fecha vía [WeekFields] del locale por defecto y
@@ -674,18 +632,18 @@ class InventoryViewModel(
         val hayLote = estado.itemsPendientes.isNotEmpty()
 
         if (!hayLote) {
-            // Sin lote mandan las validaciones CLÁSICAS (contrato de los 7 pasos).
+            // Sin lote mandan las validaciones CLÁSICAS (contrato del flujo).
             if (producto == null) {
-                _uiState.update { it.copy(screen = Screen.PICK_PRODUCT) }
+                _uiState.update { it.copy(screen = Screen.CALCULATOR, productError = true) }
                 return
             }
             if (cantidad < 1) {
-                _uiState.update { it.copy(screen = Screen.ENTER_QUANTITY, quantityError = true) }
+                _uiState.update { it.copy(screen = Screen.CALCULATOR, quantityError = true) }
                 return
             }
         }
 
-        // Guard: solo se PERSISTE desde el Paso 3 (CONFIRM). Fuera de ahí (con datos ya
+        // Guard: solo se PERSISTE desde la revisión (CONFIRM). Fuera de ahí (con datos ya
         // válidos) se ignora en silencio: misma pantalla y SIN insertar.
         if (estado.screen != Screen.CONFIRM) return
 
@@ -837,6 +795,7 @@ class InventoryViewModel(
         lastSavedRecords = emptyList(),
         canUndo = false,
         quantityError = false,
+        productError = false,
         savingError = null,
         ocrMessage = null,
         isSaving = false,
@@ -859,13 +818,10 @@ class InventoryViewModel(
         /** Tope de valor de cantidad (999.999). */
         const val MAXIMO_VALOR_CANTIDAD = 999_999
 
-        /** OCR de cámara en vivo: el campo conserva lo escrito y solo se muestra esto. */
-        const val MENSAJE_OCR_FALLIDO = "No pude leer el número. Escríbelo tú mismo."
-
         /** `InventoryUiState.ocrMessage` cuando la FOTO no dio números legibles (o el
          *  único leído superaba los 999.999 y se omitió). */
         const val MENSAJE_IMAGEN_FALLIDO =
-            "No pude leer números en la imagen. Escríbelo tú mismo."
+            "No pude leer números en la foto. Escríbelo tú mismo."
 
         /** `InventoryUiState.savingError` cuando `insertRecord` lanza. */
         const val MENSAJE_GUARDAR_FALLIDO = "No pude guardar el registro. Intenta una vez más."

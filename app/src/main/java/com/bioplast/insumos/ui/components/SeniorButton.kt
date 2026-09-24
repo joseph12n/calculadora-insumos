@@ -28,7 +28,7 @@ import com.bioplast.insumos.ui.theme.TextPrimary
  *  - GREEN  → avanzar / guardar
  *  - GREY   → volver / corregir
  *  - RED    → borrar (nunca para otra acción)
- *  - OUTLINE → acción opcional neutra (ej. escanear con la cámara)
+ *  - OUTLINE → acción opcional neutra (ej. ver registros, cambiar fecha)
  */
 enum class SeniorButtonVariant { GREEN, GREY, RED, OUTLINE }
 

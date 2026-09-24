@@ -11,7 +11,7 @@ import java.util.Locale
 
 /**
  * Fecha corta para filas, p. ej. "Lun 23" (es-CO, con inicial mayúscula).
- * Se usa en el detalle del historial y en la lista de pendientes del Paso 3.
+ * Se usa en el detalle del historial y en la lista de pendientes de la revisión.
  */
 fun fechaCorta(fecha: LocalDate): String {
     val texto = DateTimeFormatter.ofPattern("EEE d", Locale("es", "CO")).format(fecha)

@@ -32,12 +32,12 @@ import com.bioplast.insumos.ui.theme.GreyAction
 import com.bioplast.insumos.ui.theme.TextPrimary
 
 /**
- * Pantalla 5 — ¡LISTO! (éxito tras guardar el LOTE completo).
+ * Pantalla 4 — ¡LISTO! (éxito tras guardar el LOTE completo).
  *
  * Palomita verde enorme + "¡Guardado!" + resumen del lote
  * ("N productos · TOTAL" en MONEY sin decimales). **↩ DESHACER** solo se
  * muestra mientras la ventana de ~5 s siga abierta (`canUndo`): borra el lote
- * recién guardado y RESTAURA la lista en el Paso 3. **LISTO** vuelve al inicio.
+ * recién guardado y RESTAURA la lista en la revisión. **LISTO** vuelve al inicio.
  *
  * NOTA: la ViewModel es quien vuelve a START sola al cerrar la ventana de 5 s
  * (`InventoryViewModel.programarCierreDeVentanaDeDeshacer`); esta pantalla no
@@ -65,7 +65,7 @@ fun SuccessScreen(
 ) {
     // Resumen del lote: lo insertado manda; si estuviera vacío, el estado del lote.
     // Nota: `cantidadLote` cuenta UNIDADES (suma de cantidades), igual que en el
-    // Paso 3; tras guardar, los pendientes ya están vacíos, así que se recalcula
+    // revisión; tras guardar, los pendientes ya están vacíos, así que se recalcula
     // desde lastSavedRecords para mostrar el lote COMPLEto y no solo el item actual.
     val guardados = lastSavedRecords
     val totalProductos = if (guardados.isNotEmpty()) {
@@ -84,7 +84,7 @@ fun SuccessScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
