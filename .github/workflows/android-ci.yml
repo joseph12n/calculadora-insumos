@@ -1,0 +1,98 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Tests + APK debug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 (temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar SDK de Android
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar platform 35 + build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Gradle con caché
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests (75 esperados)
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Compilar APK debug
+        run: ./gradlew assembleDebug
+
+      - name: Subir APK como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: calculadora-insumos-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: APK release (solo en tags v*)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17 (temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar SDK de Android
+        uses: android-actions/setup-android@v3
+
+      - name: Instalar platform 35 + build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+      - name: Gradle con caché
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restaurar keystore desde el secreto (opcional)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p keystore
+            echo "$KEYSTORE_B64" | base64 -d > keystore/release.jks
+            echo "Keystore restaurado para firma de release."
+          else
+            echo "Secreto KEYSTORE_B64 no configurado: la APK se firmará con la clave de debug (funcional para instalación manual)."
+          fi
+
+      - name: Compilar APK release
+        env:
+          ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Publicar APK en GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true
