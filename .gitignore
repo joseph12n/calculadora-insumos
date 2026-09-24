@@ -1,0 +1,15 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/keystore/
+/captures
+.externalNativeBuild
+.cxx
+
+# Configuración local de agentes OpenCode y documento de contexto del negocio
+.opencode/
+/prompt_de_construcci_n.md
